@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dilara</string>
+    <string name="activate">Yetki Ver / Aktif Et</string>
+    <string name="deactivate">Aktif (kapatmak için bas)</string>
+    <string name="placeholder_input">Bir şey yaz veya \'Selam Dilara\' diye konuş…</string>
+    <string name="empty_inactive">Henüz aktif değilim. Yetki ver butonuna basarsan başlayabiliriz.</string>
+    <string name="empty_active">Aktif moddayım. \'Selam Dilara\' diyebilir veya yazıyla konuşabilirsin.</string>
+</resources>

@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+*.key
+*.pem
+
+# Veri
+desktop/dilara/data/memory/*.db
+desktop/dilara/data/memory/*.db-journal
+desktop/dilara/data/logs/*.log
+desktop/dilara/data/profiles/*.json
+backend/data/*.db
+
+# Modeller (büyük dosyalar)
+*.onnx
+*.bin
+*.pt
+*.gguf
+desktop/dilara/assets/models/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+android/build/
+android/.gradle/
+android/local.properties
+android/app/build/
+android/app/release/
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.iml
+
+# Geçici
+tmp/
+temp/
+*.tmp
