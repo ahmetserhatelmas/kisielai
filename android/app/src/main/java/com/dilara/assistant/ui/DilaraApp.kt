@@ -143,22 +143,12 @@ fun DilaraApp(vm: ChatViewModel = viewModel()) {
 
             // Düşünme göstergesi
             AnimatedVisibility(
-                visible = state.isThinking && state.screenCaptureCountdown == 0,
+                visible = state.isThinking,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
             ) {
                 ThinkingDots()
-            }
-
-            // Ekran yakalama geri sayım overlay'i
-            AnimatedVisibility(
-                visible = state.screenCaptureCountdown > 0,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                ScreenCaptureCountdown(state.screenCaptureCountdown)
             }
         }
     }
@@ -464,40 +454,7 @@ private fun SettingsDialog(
 private fun statusText(state: com.dilara.assistant.viewmodel.ChatUiState): String = when {
     state.isListening -> "Seni dinliyorum..."
     state.isSpeaking  -> "Konuşuyorum..."
-    state.screenCaptureCountdown > 0 -> "Ekran yakalanıyor..."
     state.isThinking  -> "Düşünüyorum..."
     state.isActive    -> "Aktif · ${state.mode.label}"
     else              -> "Pasif"
-}
-
-@Composable
-private fun ScreenCaptureCountdown(seconds: Int) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xCC000000)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = "$seconds",
-                fontSize = 96.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            )
-            Text(
-                text = "Görmek istediğin ekrana geç",
-                fontSize = 18.sp,
-                color = Color.White.copy(alpha = 0.85f),
-            )
-            Text(
-                text = "Dilara $seconds saniye sonra ekranı yakalayacak",
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.55f),
-            )
-        }
-    }
 }

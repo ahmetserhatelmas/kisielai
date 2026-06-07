@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val projection = MediaProjectionStore.ensureProjection()
                     ?: return@runVisionCapture Result.failure(Exception("Ekran izni yok."))
-                delay(200)
+                delay(400)
                 val bitmap = try {
                     ScreenCaptureHelper.captureWithProjection(projection, metrics)
                 } catch (e: Exception) {
