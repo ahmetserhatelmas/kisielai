@@ -18,6 +18,7 @@ import com.dilara.assistant.service.SpeechService
 import com.dilara.assistant.service.TtsService
 import com.dilara.assistant.service.WakeWordService
 import com.dilara.assistant.tools.ToolExecutor
+import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,9 +175,33 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun analyzeScreen() {
         if (!_state.value.isActive || _state.value.isThinking) return
         val label = "👁 Ekrana bak"
+        val prompt = "Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat."
         appendUserMessage(label)
-        runVisionCapture("Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat.", label) {
-            VisionCapture.captureScreen?.invoke(it)
+        _state.value = _state.value.copy(isThinking = true, isSpeaking = false)
+
+        ScreenCapturePipeline.start(prompt, label) { result ->
+            viewModelScope.launch {
+                result.fold(
+                    onSuccess = { reply ->
+                        memory.appendHistory("user", label)
+                        memory.appendHistory("assistant", reply)
+                        appendAssistantMessage(reply)
+                        _state.value = _state.value.copy(isThinking = false)
+                        speak(reply)
+                    },
+                    onFailure = { error ->
+                        appendAssistantMessage("Görsel analiz hatası: ${error.message?.take(100)}")
+                        _state.value = _state.value.copy(isThinking = false, isSpeaking = false)
+                    },
+                )
+            }
+        }
+
+        val launcher = VisionCapture.launchScreenCapture
+        if (launcher == null) {
+            ScreenCapturePipeline.complete(Result.failure(Exception("Ekran analizi başlatılamadı.")))
+        } else {
+            launcher.invoke()
         }
     }
 

@@ -16,8 +16,11 @@ import android.telephony.SmsManager
 import com.dilara.assistant.data.api.FunctionDef
 import com.dilara.assistant.data.api.OpenAITool
 import com.dilara.assistant.service.DilaraAccessibilityService
+import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.*
+import kotlin.coroutines.resume
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -251,9 +254,16 @@ class ToolExecutor(private val context: Context) {
         "look_at_screen" -> {
             val prompt = args["prompt"]?.jsonPrimitive?.contentOrNull
                 ?: "Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat."
-            val capture = VisionCapture.captureScreen
+            val launcher = VisionCapture.launchScreenCapture
                 ?: return@execute "Ekran analizi şu an kullanılamıyor."
-            capture(prompt).getOrElse { return@execute "Ekran hatası: ${it.message}" }
+            suspendCancellableCoroutine { cont ->
+                ScreenCapturePipeline.start(prompt, "👁 Ekrana bak") { result ->
+                    cont.resume(
+                        result.getOrElse { "Ekran hatası: ${it.message}" },
+                    )
+                }
+                launcher.invoke()
+            }
         }
 
         else -> "Bilinmeyen araç: $name"

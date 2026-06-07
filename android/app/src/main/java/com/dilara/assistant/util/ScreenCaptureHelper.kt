@@ -12,12 +12,12 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.PixelCopy
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 object ScreenCaptureHelper {
 
-    /** Aktif Activity penceresini yakalar (hızlı, ek izin gerektirmez). */
     suspend fun captureActivityWindow(activity: Activity): Bitmap =
         suspendCancellableCoroutine { cont ->
             val view = activity.window.decorView.rootView
@@ -33,53 +33,100 @@ object ScreenCaptureHelper {
             )
         }
 
-    /** MediaProjection ile tüm ekranı yakalar. */
     suspend fun captureWithProjection(
         projection: MediaProjection,
         metrics: DisplayMetrics,
-    ): Bitmap = suspendCancellableCoroutine { cont ->
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
+    ): Bitmap = withTimeout(8_000) {
+        suspendCancellableCoroutine { cont ->
+            val width = metrics.widthPixels
+            val height = metrics.heightPixels
+            val density = metrics.densityDpi
 
-        val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        var virtualDisplay: VirtualDisplay? = null
+            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            var virtualDisplay: VirtualDisplay? = null
+            var finished = false
 
-        reader.setOnImageAvailableListener({ imageReader ->
-            val image = imageReader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            try {
-                val plane = image.planes[0]
-                val buffer = plane.buffer
-                val pixelStride = plane.pixelStride
-                val rowStride = plane.rowStride
-                val rowPadding = rowStride - pixelStride * width
-                val bitmap = Bitmap.createBitmap(
-                    width + rowPadding / pixelStride,
-                    height,
-                    Bitmap.Config.ARGB_8888,
-                )
-                bitmap.copyPixelsFromBuffer(buffer)
-                val cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height)
-                bitmap.recycle()
-                cont.resume(cropped)
-            } catch (e: Exception) {
-                cont.resumeWithException(e)
-            } finally {
-                image.close()
+            fun finish(bitmap: Bitmap) {
+                if (finished) return
+                finished = true
                 virtualDisplay?.release()
                 reader.close()
+                cont.resume(bitmap)
             }
-        }, Handler(Looper.getMainLooper()))
 
-        virtualDisplay = projection.createVirtualDisplay(
-            "DilaraScreenCapture",
-            width,
-            height,
-            density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader.surface,
-            null,
-            null,
-        )
+            fun fail(error: Exception) {
+                if (finished) return
+                finished = true
+                virtualDisplay?.release()
+                reader.close()
+                cont.resumeWithException(error)
+            }
+
+            reader.setOnImageAvailableListener({ imageReader ->
+                val image = imageReader.acquireLatestImage()
+                if (image == null) return@setOnImageAvailableListener
+                try {
+                    val plane = image.planes[0]
+                    val buffer = plane.buffer
+                    val pixelStride = plane.pixelStride
+                    val rowStride = plane.rowStride
+                    val rowPadding = rowStride - pixelStride * width
+                    val bitmap = Bitmap.createBitmap(
+                        width + rowPadding / pixelStride,
+                        height,
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    bitmap.copyPixelsFromBuffer(buffer)
+                    val cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height)
+                    bitmap.recycle()
+                    finish(cropped)
+                } catch (e: Exception) {
+                    fail(e)
+                } finally {
+                    image.close()
+                }
+            }, Handler(Looper.getMainLooper()))
+
+            virtualDisplay = projection.createVirtualDisplay(
+                "DilaraScreenCapture",
+                width,
+                height,
+                density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface,
+                null,
+                null,
+            )
+
+            // İlk frame gelmezse tekrar dene
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (finished) return@postDelayed
+                val image = reader.acquireLatestImage()
+                if (image != null) {
+                    try {
+                        val plane = image.planes[0]
+                        val buffer = plane.buffer
+                        val pixelStride = plane.pixelStride
+                        val rowStride = plane.rowStride
+                        val rowPadding = rowStride - pixelStride * width
+                        val bitmap = Bitmap.createBitmap(
+                            width + rowPadding / pixelStride,
+                            height,
+                            Bitmap.Config.ARGB_8888,
+                        )
+                        bitmap.copyPixelsFromBuffer(buffer)
+                        val cropped = Bitmap.createBitmap(bitmap, 0, 0, width, height)
+                        bitmap.recycle()
+                        finish(cropped)
+                    } catch (e: Exception) {
+                        fail(e)
+                    } finally {
+                        image.close()
+                    }
+                } else {
+                    fail(Exception("Ekran görüntüsü alınamadı. Tekrar dene."))
+                }
+            }, 900)
+        }
     }
 }

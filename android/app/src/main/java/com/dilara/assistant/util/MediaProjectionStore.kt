@@ -10,15 +10,14 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/**
- * MediaProjection oturumunu Activity yeniden oluşsa bile korur.
- * Ekran paylaşım izni sırasında uygulama arka plana gidince continuation kaybolmasın diye.
- */
 object MediaProjectionStore {
 
     private var manager: MediaProjectionManager? = null
     private var projection: MediaProjection? = null
     private var pending: CancellableContinuation<MediaProjection>? = null
+
+    private var savedResultCode: Int? = null
+    private var savedResultData: Intent? = null
 
     fun init(context: Context) {
         if (manager == null) {
@@ -26,14 +25,14 @@ object MediaProjectionStore {
         }
     }
 
-    fun createCaptureIntent(): Intent {
-        return manager!!.createScreenCaptureIntent()
-    }
+    fun createCaptureIntent(): Intent = manager!!.createScreenCaptureIntent()
 
     fun onPermissionResult(resultCode: Int, data: Intent?) {
+        ScreenCapturePipeline.permissionRequestInFlight = false
         if (resultCode == Activity.RESULT_OK && data != null) {
-            projection?.stop()
-            projection = manager!!.getMediaProjection(resultCode, data)
+            savedResultCode = resultCode
+            savedResultData = Intent(data)
+            rebuildProjection()
             pending?.resume(projection!!)
         } else {
             pending?.resumeWithException(Exception("Ekran kaydı izni verilmedi."))
@@ -41,13 +40,32 @@ object MediaProjectionStore {
         pending = null
     }
 
+    fun hasSavedPermission(): Boolean = savedResultCode == Activity.RESULT_OK && savedResultData != null
+
+    fun ensureProjection(): MediaProjection? {
+        if (projection != null) return projection
+        rebuildProjection()
+        return projection
+    }
+
+    private fun rebuildProjection() {
+        val code = savedResultCode ?: return
+        val data = savedResultData ?: return
+        projection?.stop()
+        projection = manager!!.getMediaProjection(code, data)
+    }
+
     suspend fun awaitProjection(requestPermission: () -> Unit): MediaProjection {
-        projection?.let { return it }
+        ensureProjection()?.let { return it }
         return suspendCancellableCoroutine { cont ->
             pending?.cancel()
             pending = cont
+            ScreenCapturePipeline.permissionRequestInFlight = true
             requestPermission()
-            cont.invokeOnCancellation { pending = null }
+            cont.invokeOnCancellation {
+                pending = null
+                ScreenCapturePipeline.permissionRequestInFlight = false
+            }
         }
     }
 
@@ -58,5 +76,7 @@ object MediaProjectionStore {
         pending = null
         projection?.stop()
         projection = null
+        savedResultCode = null
+        savedResultData = null
     }
 }
