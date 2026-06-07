@@ -18,6 +18,7 @@ import com.dilara.assistant.service.SpeechService
 import com.dilara.assistant.service.TtsService
 import com.dilara.assistant.service.WakeWordService
 import com.dilara.assistant.tools.ToolExecutor
+import com.dilara.assistant.util.AttachmentCapture
 import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
@@ -202,6 +203,46 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ScreenCapturePipeline.complete(Result.failure(Exception("Ekran analizi başlatılamadı.")))
         } else {
             launcher.invoke()
+        }
+    }
+
+    // ── Ek dosya / medya analizi ──────────────────────────────────────────────
+
+    fun analyzePickedImage() {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        val label = "🖼 Galeri resmi"
+        appendUserMessage(label)
+        runVisionCapture("Bu resimde ne var? Türkçe ve detaylıca anlat.", label) {
+            AttachmentCapture.captureImage?.invoke(it)
+        }
+    }
+
+    fun analyzePickedVideo() {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        val label = "🎬 Video karesi"
+        appendUserMessage(label)
+        runVisionCapture("Bu videoda ne görüyorsun? Türkçe ve kısa anlat.", label) {
+            AttachmentCapture.captureVideo?.invoke(it)
+        }
+    }
+
+    fun analyzePickedFile() {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        _state.value = _state.value.copy(isThinking = true, isSpeaking = false)
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    AttachmentCapture.readFile?.invoke()
+                        ?: Result.failure(Exception("Dosya okuyucu hazır değil."))
+                }
+                val content = result.getOrThrow()
+                _state.value = _state.value.copy(isThinking = false)
+                // Dosya içeriğini kullanıcı mesajı olarak gönder
+                send("📎 Dosya içeriği:\n\n${content.take(4000)}")
+            } catch (e: Exception) {
+                appendAssistantMessage("Dosya okunamadı: ${e.message?.take(100)}")
+                _state.value = _state.value.copy(isThinking = false)
+            }
         }
     }
 

@@ -3,6 +3,8 @@ package com.dilara.assistant
 import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Bundle
 import android.util.DisplayMetrics
 import androidx.activity.ComponentActivity
@@ -19,6 +21,7 @@ import com.dilara.assistant.service.WakeWordService
 import com.dilara.assistant.service.ScreenCaptureService
 import com.dilara.assistant.ui.DilaraApp
 import com.dilara.assistant.ui.theme.DilaraTheme
+import com.dilara.assistant.util.AttachmentCapture
 import com.dilara.assistant.util.BitmapUtils
 import com.dilara.assistant.util.MediaProjectionStore
 import com.dilara.assistant.util.ScreenCaptureHelper
@@ -37,6 +40,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var memory: MemoryRepository
     private var visionLLM: VisionLLM? = null
     private var cameraContinuation: CancellableContinuation<Bitmap?>? = null
+    private var imagePickerCont: CancellableContinuation<Uri?>? = null
+    private var videoPickerCont: CancellableContinuation<Uri?>? = null
+    private var filePickerCont: CancellableContinuation<Uri?>? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -49,6 +55,27 @@ class MainActivity : ComponentActivity() {
     ) { bitmap ->
         cameraContinuation?.resume(bitmap)
         cameraContinuation = null
+    }
+
+    private val imagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        imagePickerCont?.resume(uri)
+        imagePickerCont = null
+    }
+
+    private val videoPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        videoPickerCont?.resume(uri)
+        videoPickerCont = null
+    }
+
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        filePickerCont?.resume(uri)
+        filePickerCont = null
     }
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -72,6 +99,7 @@ class MainActivity : ComponentActivity() {
         memory = MemoryRepository(applicationContext)
         MediaProjectionStore.init(applicationContext)
         registerVisionCapture()
+        registerAttachmentCapture()
         requestRequiredPermissions()
 
         setContent {
@@ -97,6 +125,9 @@ class MainActivity : ComponentActivity() {
         if (isFinishing) {
             VisionCapture.captureCamera = null
             VisionCapture.launchScreenCapture = null
+            AttachmentCapture.captureImage = null
+            AttachmentCapture.captureVideo = null
+            AttachmentCapture.readFile = null
             visionLLM?.close()
             MediaProjectionStore.release()
             ScreenCapturePipeline.clear()
@@ -197,4 +228,82 @@ class MainActivity : ComponentActivity() {
     private fun stopScreenCaptureService() {
         stopService(Intent(this, ScreenCaptureService::class.java))
     }
+
+    // ── Ek medya / dosya yakalama ─────────────────────────────────────────────
+
+    private fun registerAttachmentCapture() {
+        AttachmentCapture.captureImage = { prompt ->
+            runVisionCapture { vision ->
+                val uri = pickUri(imagePickerLauncher, { imagePickerCont = it }, "image/*")
+                    ?: return@runVisionCapture Result.failure(Exception("Resim seçimi iptal edildi."))
+                val bitmap = decodeBitmapFromUri(uri)
+                    ?: return@runVisionCapture Result.failure(Exception("Resim yüklenemedi."))
+                vision.describe(BitmapUtils.toBase64Jpeg(bitmap), prompt = prompt)
+            }
+        }
+
+        AttachmentCapture.captureVideo = { prompt ->
+            runVisionCapture { vision ->
+                val uri = pickUri(videoPickerLauncher, { videoPickerCont = it }, "video/*")
+                    ?: return@runVisionCapture Result.failure(Exception("Video seçimi iptal edildi."))
+                val bitmap = captureVideoFrame(uri)
+                    ?: return@runVisionCapture Result.failure(Exception("Video karesi alınamadı."))
+                vision.describe(BitmapUtils.toBase64Jpeg(bitmap), prompt = prompt)
+            }
+        }
+
+        AttachmentCapture.readFile = {
+            runCatching {
+                val uri = pickUri(filePickerLauncher, { filePickerCont = it }, "*/*")
+                    ?: throw Exception("Dosya seçimi iptal edildi.")
+                readFileContent(uri)
+            }
+        }
+    }
+
+    private suspend fun pickUri(
+        launcher: androidx.activity.result.ActivityResultLauncher<String>,
+        setCont: (CancellableContinuation<Uri?>) -> Unit,
+        mimeType: String,
+    ): Uri? = withContext(Dispatchers.Main) {
+        suspendCancellableCoroutine { cont ->
+            setCont(cont)
+            launcher.launch(mimeType)
+        }
+    }
+
+    private fun decodeBitmapFromUri(uri: Uri): Bitmap? = runCatching {
+        val stream = contentResolver.openInputStream(uri) ?: return null
+        stream.use { android.graphics.BitmapFactory.decodeStream(it) }
+    }.getOrNull()
+
+    private fun captureVideoFrame(uri: Uri): Bitmap? = runCatching {
+        val retriever = MediaMetadataRetriever()
+        retriever.setDataSource(this, uri)
+        val frame = retriever.getFrameAtTime(1_000_000L)
+            ?: retriever.getFrameAtTime(0L)
+        retriever.release()
+        frame
+    }.getOrNull()
+
+    private fun readFileContent(uri: Uri): String {
+        val mime = contentResolver.getType(uri) ?: ""
+        return when {
+            mime == "application/pdf" -> readPdfContent(uri)
+            else -> contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                ?: "[Dosya okunamadı]"
+        }
+    }
+
+    private fun readPdfContent(uri: Uri): String = runCatching {
+        val fd = contentResolver.openFileDescriptor(uri, "r") ?: return "[PDF açılamadı]"
+        fd.use {
+            val renderer = android.graphics.pdf.PdfRenderer(it)
+            val pageCount = renderer.pageCount
+            renderer.close()
+            "[PDF dosyası — $pageCount sayfa. Not: PDF metin çıkarma henüz desteklenmiyor, görsel analiz için 📷 kul.]"
+        }
+    }.getOrElse { "[PDF okunamadı: ${it.message}]" }
 }

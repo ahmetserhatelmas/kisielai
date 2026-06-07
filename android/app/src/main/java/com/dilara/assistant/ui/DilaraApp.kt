@@ -119,6 +119,9 @@ fun DilaraApp(vm: ChatViewModel = viewModel()) {
                 onMic = { vm.startListening() },
                 onCamera = { vm.analyzeCamera() },
                 onScreen = { vm.analyzeScreen() },
+                onAttachImage = { vm.analyzePickedImage() },
+                onAttachVideo = { vm.analyzePickedVideo() },
+                onAttachFile = { vm.analyzePickedFile() },
             )
         }
     ) { padding ->
@@ -262,8 +265,12 @@ private fun ChatInput(
     onMic: () -> Unit,
     onCamera: () -> Unit,
     onScreen: () -> Unit,
+    onAttachImage: () -> Unit,
+    onAttachVideo: () -> Unit,
+    onAttachFile: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
+    var showAttachMenu by remember { mutableStateOf(false) }
 
     Surface(tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -289,6 +296,41 @@ private fun ChatInput(
                 }),
             )
             Spacer(Modifier.width(6.dp))
+
+            // 📎 Ekle butonu + dropdown
+            Box {
+                FilledIconButton(
+                    onClick = { showAttachMenu = true },
+                    enabled = enabled,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Color(0xFF2C5F2E),
+                    ),
+                ) {
+                    Text("📎", fontSize = 16.sp)
+                }
+                DropdownMenu(
+                    expanded = showAttachMenu,
+                    onDismissRequest = { showAttachMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("🖼  Galeriden resim") },
+                        onClick = { showAttachMenu = false; onAttachImage() },
+                        enabled = enabled,
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🎬  Galeriden video") },
+                        onClick = { showAttachMenu = false; onAttachVideo() },
+                        enabled = enabled,
+                    )
+                    DropdownMenuItem(
+                        text = { Text("📄  Dosya seç") },
+                        onClick = { showAttachMenu = false; onAttachFile() },
+                        enabled = enabled,
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(4.dp))
             FilledIconButton(
                 onClick = onCamera,
                 enabled = enabled,
