@@ -41,6 +41,8 @@ data class ChatUiState(
     val mode: DilaraMode = DilaraMode.NORMAL,
     val apiKeyMissing: Boolean = false,
     val syncStatus: SyncStatus = SyncStatus.IDLE,
+    // Ekran yakalama geri sayımı: 0 = yok, 3/2/1 = geri sayılıyor
+    val screenCaptureCountdown: Int = 0,
 )
 
 enum class SyncStatus { IDLE, SYNCING, SUCCESS, ERROR }
@@ -181,6 +183,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         ScreenCapturePipeline.start(prompt, label) { result ->
             viewModelScope.launch {
+                _state.value = _state.value.copy(screenCaptureCountdown = 0)
                 result.fold(
                     onSuccess = { reply ->
                         memory.appendHistory("user", label)
@@ -197,11 +200,19 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        val launcher = VisionCapture.launchScreenCapture
-        if (launcher == null) {
-            ScreenCapturePipeline.complete(Result.failure(Exception("Ekran analizi başlatılamadı.")))
-        } else {
-            launcher.invoke()
+        // Kullanıcıya başka ekrana geçme süresi tanı, sonra yakala
+        viewModelScope.launch {
+            for (i in 3 downTo 1) {
+                _state.value = _state.value.copy(screenCaptureCountdown = i)
+                delay(1000)
+            }
+            _state.value = _state.value.copy(screenCaptureCountdown = 0)
+            val launcher = VisionCapture.launchScreenCapture
+            if (launcher == null) {
+                ScreenCapturePipeline.complete(Result.failure(Exception("Ekran analizi başlatılamadı.")))
+            } else {
+                launcher.invoke()
+            }
         }
     }
 
