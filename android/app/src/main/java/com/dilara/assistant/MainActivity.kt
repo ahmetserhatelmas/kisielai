@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dilara.assistant.data.local.MemoryRepository
 import com.dilara.assistant.service.VisionLLM
 import com.dilara.assistant.service.WakeWordService
+import com.dilara.assistant.service.ScreenCaptureService
 import com.dilara.assistant.ui.DilaraApp
 import com.dilara.assistant.ui.theme.DilaraTheme
 import com.dilara.assistant.util.BitmapUtils
@@ -56,10 +57,13 @@ class MainActivity : ComponentActivity() {
         MediaProjectionStore.onPermissionResult(result.resultCode, result.data)
         if (MediaProjectionStore.ensureProjection() != null) {
             lifecycleScope.launch { executePendingScreenCapture() }
-        } else if (ScreenCapturePipeline.hasPending()) {
-            ScreenCapturePipeline.complete(
-                Result.failure(Exception("Ekran kaydı izni verilmedi.")),
-            )
+        } else {
+            stopScreenCaptureService()
+            if (ScreenCapturePipeline.hasPending()) {
+                ScreenCapturePipeline.complete(
+                    Result.failure(Exception("Ekran kaydı izni verilmedi.")),
+                )
+            }
         }
     }
 
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
             visionLLM?.close()
             MediaProjectionStore.release()
             ScreenCapturePipeline.clear()
+            stopScreenCaptureService()
         }
         super.onDestroy()
     }
@@ -115,6 +120,9 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch { executePendingScreenCapture() }
             } else {
                 ScreenCapturePipeline.permissionRequestInFlight = true
+                // Android 14+: getMediaProjection() çağrılmadan önce
+                // foregroundServiceType="mediaProjection" servisi çalışıyor olmalı.
+                startForegroundService(Intent(this, ScreenCaptureService::class.java))
                 screenCaptureLauncher.launch(MediaProjectionStore.createCaptureIntent())
             }
         }
@@ -143,6 +151,7 @@ class MainActivity : ComponentActivity() {
             ScreenCapturePipeline.complete(result)
         } finally {
             ScreenCapturePipeline.captureInProgress = false
+            stopScreenCaptureService()
         }
     }
 
@@ -183,5 +192,9 @@ class MainActivity : ComponentActivity() {
 
     private fun startWakeWordService() {
         startForegroundService(Intent(this, WakeWordService::class.java))
+    }
+
+    private fun stopScreenCaptureService() {
+        stopService(Intent(this, ScreenCaptureService::class.java))
     }
 }
