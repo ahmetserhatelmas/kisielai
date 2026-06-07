@@ -19,6 +19,7 @@ private val KEY_HISTORY     = stringPreferencesKey("history_json")
 private val KEY_OPENAI_KEY  = stringPreferencesKey("openai_api_key")
 private val KEY_SERVER_URL  = stringPreferencesKey("server_url")
 private val KEY_AUTH_TOKEN  = stringPreferencesKey("auth_token")
+private val KEY_IS_ACTIVE   = booleanPreferencesKey("is_active")
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -148,5 +149,14 @@ class MemoryRepository(private val context: Context) {
 
     suspend fun saveAuthToken(token: String) {
         context.dataStore.edit { it[KEY_AUTH_TOKEN] = token }
+    }
+
+    // ── Aktivasyon durumu ─────────────────────────────────────────────────────
+
+    suspend fun getIsActive(): Boolean =
+        context.dataStore.data.map { it[KEY_IS_ACTIVE] ?: false }.first()
+
+    suspend fun saveIsActive(active: Boolean) {
+        context.dataStore.edit { it[KEY_IS_ACTIVE] = active }
     }
 }

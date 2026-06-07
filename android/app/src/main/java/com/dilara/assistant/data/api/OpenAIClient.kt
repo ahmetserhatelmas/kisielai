@@ -14,7 +14,7 @@ class OpenAIClient(private val apiKey: String) {
 
     private val json = Json {
         ignoreUnknownKeys = true
-        encodeDefaults = false
+        encodeDefaults = true
     }
 
     private val http = HttpClient(Android) {

@@ -18,6 +18,7 @@ import com.dilara.assistant.service.SpeechService
 import com.dilara.assistant.service.TtsService
 import com.dilara.assistant.service.WakeWordService
 import com.dilara.assistant.tools.ToolExecutor
+import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,10 +83,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
             val savedMode = memory.getMode()
             personality.mode = if (savedMode == "ciddi") DilaraMode.SERIOUS else DilaraMode.NORMAL
-            _state.value = _state.value.copy(mode = personality.mode)
 
             val history = memory.getHistory()
             conversationHistory.addAll(history.map { OpenAIMessage(it.role, it.content) })
+            val restoredMessages = history.map { stored ->
+                ChatMessage(
+                    text = stored.content,
+                    isUser = stored.role == "user",
+                )
+            }
+
+            val isActive = memory.getIsActive()
+            _state.value = _state.value.copy(
+                mode = personality.mode,
+                isActive = isActive,
+                messages = restoredMessages,
+                isThinking = false,
+                isSpeaking = false,
+                isListening = false,
+            )
         }
 
         registerWakeReceiver()
@@ -105,10 +121,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleActivation() {
         val newActive = !_state.value.isActive
         _state.value = _state.value.copy(isActive = newActive)
+        viewModelScope.launch { memory.saveIsActive(newActive) }
         if (newActive) {
             viewModelScope.launch { speak("Aktif oldum. Nasıl yardımcı olabilirim?") }
         } else {
             tts.stop()
+            _state.value = _state.value.copy(isSpeaking = false)
         }
     }
 
@@ -140,6 +158,48 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(isListening = false)
             if (!result.isNullOrBlank()) {
                 send(result)
+            }
+        }
+    }
+
+    fun analyzeCamera() {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        val label = "📷 Kameraya bak"
+        appendUserMessage(label)
+        runVisionCapture("Bu fotoğrafta ne var? Türkçe anlat.", label) {
+            VisionCapture.captureCamera?.invoke(it)
+        }
+    }
+
+    fun analyzeScreen() {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        val label = "👁 Ekrana bak"
+        appendUserMessage(label)
+        runVisionCapture("Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat.", label) {
+            VisionCapture.captureScreen?.invoke(it)
+        }
+    }
+
+    private fun runVisionCapture(
+        prompt: String,
+        userLabel: String,
+        capture: suspend (String) -> Result<String>?,
+    ) {
+        _state.value = _state.value.copy(isThinking = true, isSpeaking = false)
+        viewModelScope.launch {
+            try {
+                val reply = withContext(Dispatchers.IO) {
+                    capture(prompt)?.getOrThrow() ?: "Görsel analiz kullanılamıyor."
+                }
+                memory.appendHistory("user", userLabel)
+                memory.appendHistory("assistant", reply)
+                appendAssistantMessage(reply)
+                _state.value = _state.value.copy(isThinking = false)
+                speak(reply)
+            } catch (e: Exception) {
+                val errorMsg = "Görsel analiz hatası: ${e.message?.take(100)}"
+                appendAssistantMessage(errorMsg)
+                _state.value = _state.value.copy(isThinking = false, isSpeaking = false)
             }
         }
     }

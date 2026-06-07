@@ -10,6 +10,8 @@ Jetpack Compose tabanlı Android istemcisi.
 - ✅ Accessibility servisi iskeleti (cihaz kontrolü için)
 - ✅ Ktor + kotlinx.serialization bağımlılıkları
 - ⏳ Backend bağlantısı (placeholder echo)
+- ✅ Kamera analizi (OpenAI Vision, 📷 butonu + komut)
+- ✅ Ekran analizi (MediaProjection, 👁 butonu + komut)
 - ⏳ Wake word implementasyonu (Porcupine/openWakeWord ONNX)
 - ⏳ STT (Android SpeechRecognizer + Whisper alternatifi)
 - ⏳ TTS (Android TTS + opsiyonel Edge-TTS köprüsü)

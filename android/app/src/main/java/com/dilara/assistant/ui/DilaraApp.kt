@@ -117,6 +117,8 @@ fun DilaraApp(vm: ChatViewModel = viewModel()) {
                 isListening = state.isListening,
                 onSend = { vm.send(it) },
                 onMic = { vm.startListening() },
+                onCamera = { vm.analyzeCamera() },
+                onScreen = { vm.analyzeScreen() },
             )
         }
     ) { padding ->
@@ -215,7 +217,7 @@ private fun EmptyState(active: Boolean) {
             Text("Merhaba!", fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             Text(
-                if (active) "Aktif moddayım. Yazabilir veya 'Selam Dilara' diyebilirsin."
+                if (active) "Aktif moddayım. Yazabilir, 🎤 konuşabilir, 📷 kamera veya 👁 ekran analizi kullanabilirsin."
                 else "Henüz aktif değilim.\nBaşlamak için 'Yetki Ver' butonuna bas.",
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
@@ -258,6 +260,8 @@ private fun ChatInput(
     isListening: Boolean,
     onSend: (String) -> Unit,
     onMic: () -> Unit,
+    onCamera: () -> Unit,
+    onScreen: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
 
@@ -284,7 +288,27 @@ private fun ChatInput(
                     if (text.isNotBlank()) { onSend(text); text = "" }
                 }),
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
+            FilledIconButton(
+                onClick = onCamera,
+                enabled = enabled,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                ),
+            ) {
+                Text("📷", fontSize = 16.sp)
+            }
+            Spacer(Modifier.width(4.dp))
+            FilledIconButton(
+                onClick = onScreen,
+                enabled = enabled,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                ),
+            ) {
+                Text("👁", fontSize = 16.sp)
+            }
+            Spacer(Modifier.width(4.dp))
             // Mikrofon butonu
             val micColor = if (isListening) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
             FilledIconButton(

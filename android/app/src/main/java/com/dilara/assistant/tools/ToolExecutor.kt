@@ -16,6 +16,7 @@ import android.telephony.SmsManager
 import com.dilara.assistant.data.api.FunctionDef
 import com.dilara.assistant.data.api.OpenAITool
 import com.dilara.assistant.service.DilaraAccessibilityService
+import com.dilara.assistant.util.VisionCapture
 import kotlinx.serialization.json.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -53,6 +54,8 @@ class ToolExecutor(private val context: Context) {
         tool("get_notifications", "Son bildirimleri oku.", """{"type":"object","properties":{}}"""),
         tool("remember", "Kullanıcı hakkında öğrenilen bir bilgiyi kaydet.", """{"type":"object","properties":{"text":{"type":"string"},"category":{"type":"string","enum":["rutin","tercih","kişi","not","olay","genel"]}},"required":["text"]}"""),
         tool("switch_mode", "Dilara'nın modunu değiştir.", """{"type":"object","properties":{"mode":{"type":"string","enum":["normal","ciddi"]}},"required":["mode"]}"""),
+        tool("analyze_camera", "Kamerayı aç, fotoğraf çek ve görseli analiz et.", """{"type":"object","properties":{"prompt":{"type":"string","description":"Görsele sorulacak soru"}}}"""),
+        tool("look_at_screen", "Telefon ekranının görüntüsünü al ve analiz et.", """{"type":"object","properties":{"prompt":{"type":"string","description":"Ekrana sorulacak soru"}}}"""),
     )
 
     // ── Araç yürütücü ─────────────────────────────────────────────────────────
@@ -235,6 +238,22 @@ class ToolExecutor(private val context: Context) {
             val mode = args["mode"]?.jsonPrimitive?.contentOrNull ?: "normal"
             onModeChange(mode)
             if (mode == "ciddi") "Ciddi moda geçtim." else "Normal moda geçtim."
+        }
+
+        "analyze_camera" -> {
+            val prompt = args["prompt"]?.jsonPrimitive?.contentOrNull
+                ?: "Bu fotoğrafta ne var? Türkçe ve kısa anlat."
+            val capture = VisionCapture.captureCamera
+                ?: return@execute "Kamera şu an kullanılamıyor."
+            capture(prompt).getOrElse { return@execute "Kamera hatası: ${it.message}" }
+        }
+
+        "look_at_screen" -> {
+            val prompt = args["prompt"]?.jsonPrimitive?.contentOrNull
+                ?: "Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat."
+            val capture = VisionCapture.captureScreen
+                ?: return@execute "Ekran analizi şu an kullanılamıyor."
+            capture(prompt).getOrElse { return@execute "Ekran hatası: ${it.message}" }
         }
 
         else -> "Bilinmeyen araç: $name"

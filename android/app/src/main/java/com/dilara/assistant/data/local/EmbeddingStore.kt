@@ -4,6 +4,17 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -100,16 +111,14 @@ class EmbeddingStore(private val context: Context) {
     private suspend fun embed(text: String, apiKey: String): List<Float>? {
         if (apiKey.isBlank()) return null
         return runCatching {
-            val client = io.ktor.client.HttpClient(io.ktor.client.engine.android.Android) {
-                install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
-                    io.ktor.serialization.kotlinx.json.json(json)
-                }
-                install(io.ktor.client.plugins.HttpTimeout) { requestTimeoutMillis = 20_000 }
+            val client = HttpClient(Android) {
+                install(ContentNegotiation) { json(json) }
+                install(HttpTimeout) { requestTimeoutMillis = 20_000 }
             }
             val response: EmbeddingResponse = client.post(EMBEDDING_URL) {
-                io.ktor.http.contentType(io.ktor.http.ContentType.Application.Json)
-                io.ktor.client.request.bearerAuth(apiKey)
-                io.ktor.client.request.setBody(EmbeddingRequest(model = EMBEDDING_MODEL, input = text))
+                contentType(ContentType.Application.Json)
+                bearerAuth(apiKey)
+                setBody(EmbeddingRequest(model = EMBEDDING_MODEL, input = text))
             }.body()
             client.close()
             response.data.firstOrNull()?.embedding
