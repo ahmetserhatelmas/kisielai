@@ -21,6 +21,7 @@ import com.dilara.assistant.tools.ToolExecutor
 import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
