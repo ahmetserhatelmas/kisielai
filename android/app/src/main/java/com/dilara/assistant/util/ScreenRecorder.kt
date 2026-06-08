@@ -30,6 +30,8 @@ object ScreenRecorder {
     private var virtualDisplay: VirtualDisplay? = null
     private var handler: Handler? = null
     private var captureRunnable: Runnable? = null
+    private var projectionRef: MediaProjection? = null
+    private var projectionCallback: MediaProjection.Callback? = null
 
     private var width = 0
     private var height = 0
@@ -48,6 +50,19 @@ object ScreenRecorder {
         val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         reader = imageReader
 
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        // Android 14+ (API 34): createVirtualDisplay öncesi callback kaydı ZORUNLU
+        val callback = object : MediaProjection.Callback() {
+            override fun onStop() {
+                // Sistem projeksiyonu durdurursa kaynakları bırak
+                stop()
+            }
+        }
+        projectionCallback = callback
+        projectionRef = projection
+        projection.registerCallback(callback, mainHandler)
+
         virtualDisplay = projection.createVirtualDisplay(
             "DilaraScreenRecord",
             width,
@@ -59,20 +74,19 @@ object ScreenRecorder {
             null,
         )
 
-        val h = Handler(Looper.getMainLooper())
-        handler = h
+        handler = mainHandler
         isRecording = true
 
         val runnable = object : Runnable {
             override fun run() {
                 if (!isRecording) return
                 grabFrame()
-                h.postDelayed(this, FRAME_INTERVAL_MS)
+                mainHandler.postDelayed(this, FRAME_INTERVAL_MS)
             }
         }
         captureRunnable = runnable
         // İlk kareyi biraz gecikmeyle al (VirtualDisplay hazırlansın)
-        h.postDelayed(runnable, 600)
+        mainHandler.postDelayed(runnable, 600)
     }
 
     private fun grabFrame() {
@@ -117,6 +131,9 @@ object ScreenRecorder {
         virtualDisplay = null
         reader?.close()
         reader = null
+        projectionCallback?.let { cb -> runCatching { projectionRef?.unregisterCallback(cb) } }
+        projectionCallback = null
+        projectionRef = null
         return synchronized(frames) {
             val out = ArrayList(frames)
             frames.clear() // recycle etme — sahiplik çağırana geçti

@@ -46,11 +46,16 @@ object ScreenCaptureHelper {
             var virtualDisplay: VirtualDisplay? = null
             var finished = false
 
+            // Android 14+ (API 34): createVirtualDisplay öncesi callback kaydı ZORUNLU
+            val projectionCallback = object : MediaProjection.Callback() {}
+            projection.registerCallback(projectionCallback, Handler(Looper.getMainLooper()))
+
             fun finish(bitmap: Bitmap) {
                 if (finished) return
                 finished = true
                 virtualDisplay?.release()
                 reader.close()
+                runCatching { projection.unregisterCallback(projectionCallback) }
                 cont.resume(bitmap)
             }
 
@@ -59,6 +64,7 @@ object ScreenCaptureHelper {
                 finished = true
                 virtualDisplay?.release()
                 reader.close()
+                runCatching { projection.unregisterCallback(projectionCallback) }
                 cont.resumeWithException(error)
             }
 
