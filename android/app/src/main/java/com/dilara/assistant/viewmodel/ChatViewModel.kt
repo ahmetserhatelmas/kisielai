@@ -358,7 +358,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             },
                         )
                     },
-                    temperature = if (personality.mode == DilaraMode.SERIOUS) 0.4 else 0.85,
+                    temperature = if (personality.mode == DilaraMode.SERIOUS) 0.3 else 0.65,
                 )
 
                 // Geçmişe ekle (kullanıcı + asistan)
