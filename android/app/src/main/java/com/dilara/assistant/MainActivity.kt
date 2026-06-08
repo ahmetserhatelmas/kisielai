@@ -287,13 +287,40 @@ class MainActivity : ComponentActivity() {
     }.getOrNull()
 
     private fun readFileContent(uri: Uri): String {
-        val mime = contentResolver.getType(uri) ?: ""
+        val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+        val fileName = uri.lastPathSegment ?: "dosya"
+
         return when {
             mime == "application/pdf" -> readPdfContent(uri)
-            else -> contentResolver.openInputStream(uri)
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                ?: "[Dosya okunamadı]"
+
+            // Metin tabanlı formatlar
+            mime.startsWith("text/") ||
+            mime == "application/json" ||
+            mime == "application/xml" ||
+            mime == "application/javascript" -> {
+                val content = contentResolver.openInputStream(uri)
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    ?: return "[Dosya okunamadı]"
+                // Çok uzun dosyaları kes
+                if (content.length > 12_000) {
+                    content.take(12_000) + "\n\n[... dosya çok uzun, ilk 12.000 karakter gösterildi]"
+                } else {
+                    content
+                }
+            }
+
+            // Görsel → resim analizini kullan
+            mime.startsWith("image/") ->
+                "[Bu bir resim dosyası ($fileName). Resim analizi için 📎 → Galeriden resim seçeneğini kullan.]"
+
+            // Video → video analizini kullan
+            mime.startsWith("video/") ->
+                "[Bu bir video dosyası ($fileName). Video analizi için 📎 → Galeriden video seçeneğini kullan.]"
+
+            // Binary/office/zip vb. → desteklenmiyor
+            else ->
+                "[Desteklenmeyen dosya türü: $mime ($fileName). Şu an yalnızca .txt, .csv, .json, .xml ve .pdf okunabilir.]"
         }
     }
 
