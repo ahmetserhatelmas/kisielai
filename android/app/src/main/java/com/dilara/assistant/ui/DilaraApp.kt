@@ -21,7 +21,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -292,7 +292,7 @@ private fun ChatInput(
                 enabled = enabled,
                 modifier = Modifier
                     .weight(1f)
-                    .onKeyEvent { keyEvent ->
+                    .onPreviewKeyEvent { keyEvent ->
                         // Fiziksel klavyede Enter → gönder (Shift+Enter = yeni satır)
                         if (keyEvent.type == KeyEventType.KeyDown &&
                             keyEvent.key == Key.Enter &&
