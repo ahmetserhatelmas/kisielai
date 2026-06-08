@@ -17,6 +17,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -284,7 +290,18 @@ private fun ChatInput(
                     Text(if (enabled) "Bir şey yaz..." else "Önce yetki ver")
                 },
                 enabled = enabled,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .onKeyEvent { keyEvent ->
+                        // Fiziksel klavyede Enter → gönder (Shift+Enter = yeni satır)
+                        if (keyEvent.type == KeyEventType.KeyDown &&
+                            keyEvent.key == Key.Enter &&
+                            !keyEvent.isShiftPressed
+                        ) {
+                            if (text.isNotBlank()) { onSend(text); text = "" }
+                            true
+                        } else false
+                    },
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(
