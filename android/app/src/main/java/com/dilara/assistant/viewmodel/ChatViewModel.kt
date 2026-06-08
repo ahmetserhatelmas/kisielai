@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dilara.assistant.data.api.DilaraClient
@@ -160,6 +161,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(isListening = false)
             if (!result.isNullOrBlank()) {
                 send(result)
+            } else {
+                val code = speech.lastErrorCode
+                val msg = when (code) {
+                    null,
+                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> null // normal sessizlik
+                    SpeechRecognizer.ERROR_AUDIO -> "🎤 Mikrofon açılamadı. Uygulama izinlerini kontrol et."
+                    SpeechRecognizer.ERROR_NETWORK,
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "🌐 İnternet bağlantısı yok. Türkçe offline paketi emülatörde eksik olabilir."
+                    SpeechRecognizer.ERROR_NOT_SUPPORTED -> "🎤 Bu cihazda ses tanıma desteklenmiyor."
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "🎤 Ses tanıma meşgul, biraz bekle."
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "🎤 Mikrofon izni verilmemiş."
+                    else -> "🎤 Ses tanınamadı (kod: $code). Emülatörde mikrofon ayarı gerekebilir."
+                }
+                if (msg != null) appendAssistantMessage(msg)
             }
         }
     }

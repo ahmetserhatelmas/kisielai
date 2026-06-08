@@ -21,52 +21,77 @@ class SpeechService(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
 
-    private fun buildIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
-        putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
-    }
+    /** Son onError kodu; null = henüz hata yok / normal sessizlik. */
+    var lastErrorCode: Int? = null
+        private set
+
+    private fun buildIntent(lang: String = "tr-TR") =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang)
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+        }
 
     /**
      * Mikrofonu açar, kullanıcı konuşmasını bekler, transkripti döner.
-     * Hata durumunda null döner.
+     * Hata durumunda null döner; [lastErrorCode] ile hata tipi sorgulanabilir.
      * Ana (UI) thread'de çağrılmalıdır.
      */
-    suspend fun listen(): String? = suspendCancellableCoroutine { cont ->
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    suspend fun listen(): String? {
+        // Önce Türkçe dene, hata gelirse İngilizce ile yeniden dene
+        val result = listenWithLang("tr-TR")
+        if (result != null) return result
 
-        recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-
-            override fun onResults(results: Bundle?) {
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                if (cont.isActive) cont.resume(matches?.firstOrNull())
-            }
-
-            override fun onError(error: Int) {
-                if (cont.isActive) cont.resume(null)
-            }
-        })
-
-        recognizer?.startListening(buildIntent())
-
-        cont.invokeOnCancellation {
-            recognizer?.cancel()
-            recognizer?.destroy()
-            recognizer = null
+        val code = lastErrorCode ?: return null
+        val isTechnicalError = code !in listOf(
+            SpeechRecognizer.ERROR_NO_MATCH,
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+        )
+        if (isTechnicalError) {
+            // tr-TR paketi yoksa en-US ile fallback
+            return listenWithLang("en-US")
         }
+        return null
     }
+
+    private suspend fun listenWithLang(lang: String): String? =
+        suspendCancellableCoroutine { cont ->
+            lastErrorCode = null
+            recognizer?.destroy()
+            recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+
+            recognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (cont.isActive) cont.resume(matches?.firstOrNull())
+                }
+
+                override fun onError(error: Int) {
+                    lastErrorCode = error
+                    if (cont.isActive) cont.resume(null)
+                }
+            })
+
+            recognizer?.startListening(buildIntent(lang))
+
+            cont.invokeOnCancellation {
+                recognizer?.cancel()
+                recognizer?.destroy()
+                recognizer = null
+            }
+        }
 
     fun destroy() {
         recognizer?.cancel()
