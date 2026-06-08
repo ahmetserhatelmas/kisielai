@@ -256,7 +256,30 @@ class MainActivity : ComponentActivity() {
             runCatching {
                 val uri = pickUri(filePickerLauncher, { filePickerCont = it }, "*/*")
                     ?: throw Exception("Dosya seçimi iptal edildi.")
-                readFileContent(uri)
+                val mime = contentResolver.getType(uri) ?: "application/octet-stream"
+                when {
+                    mime.startsWith("image/") -> {
+                        val bitmap = decodeBitmapFromUri(uri)
+                            ?: throw Exception("Resim yüklenemedi.")
+                        runVisionCapture { vision ->
+                            vision.describe(
+                                BitmapUtils.toBase64Jpeg(bitmap),
+                                prompt = "Bu resimde ne var? Türkçe ve detaylıca anlat.",
+                            )
+                        }.getOrThrow()
+                    }
+                    mime.startsWith("video/") -> {
+                        val bitmap = captureVideoFrame(uri)
+                            ?: throw Exception("Video karesi alınamadı.")
+                        runVisionCapture { vision ->
+                            vision.describe(
+                                BitmapUtils.toBase64Jpeg(bitmap),
+                                prompt = "Bu görselde ne görüyorsun? Türkçe anlat.",
+                            )
+                        }.getOrThrow()
+                    }
+                    else -> readFileContent(uri)
+                }
             }
         }
     }
@@ -315,13 +338,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Görsel → resim analizini kullan
-            mime.startsWith("image/") ->
-                "[Bu bir resim dosyası ($fileName). Resim analizi için 📎 → Galeriden resim seçeneğini kullan.]"
-
-            // Video → video analizini kullan
-            mime.startsWith("video/") ->
-                "[Bu bir video dosyası ($fileName). Video analizi için 📎 → Galeriden video seçeneğini kullan.]"
+            // Görsel/video → artık yukarıdaki readFile callback'inde handle ediliyor
+            mime.startsWith("image/") || mime.startsWith("video/") ->
+                "[Görsel dosya — desteklenmeyen format için 📎 → Galeriden resim/video kullan.]"
 
             // Binary/office/zip vb. → desteklenmiyor
             else ->
