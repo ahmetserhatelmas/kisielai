@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dilara.assistant.data.api.DilaraClient
@@ -18,11 +17,13 @@ import com.dilara.assistant.modules.PersonalityManager
 import com.dilara.assistant.service.SpeechService
 import com.dilara.assistant.service.TtsService
 import com.dilara.assistant.service.WakeWordService
+import com.dilara.assistant.service.WhisperSTT
 import com.dilara.assistant.tools.ToolExecutor
 import com.dilara.assistant.util.AttachmentCapture
 import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,6 +57,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val personality = PersonalityManager()
     private val tts = TtsService(app)
     private val speech = SpeechService(app)
+    private val whisper = WhisperSTT(app)
     private val toolExecutor = ToolExecutor(app)
 
     private var openAIClient: OpenAIClient? = null
@@ -113,6 +115,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         tts.shutdown()
         speech.destroy()
+        whisper.release()
         openAIClient?.close()
         syncClient?.close()
         unregisterWakeReceiver()
@@ -153,28 +156,48 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Sesli giriş ───────────────────────────────────────────────────────────
 
+    // ── Ses girişi (Whisper tabanlı) ──────────────────────────────────────────
+
     fun startListening() {
-        if (!_state.value.isActive || _state.value.isListening || _state.value.isThinking) return
-        viewModelScope.launch(Dispatchers.Main) {
+        if (!_state.value.isActive || _state.value.isThinking) return
+        if (_state.value.isListening) {
+            // İkinci basış → kaydı durdur ve transkript et
+            stopAndTranscribe()
+        } else {
+            // İlk basış → kaydı başlat
+            whisper.startRecording()
             _state.value = _state.value.copy(isListening = true)
-            val result = speech.listen()
-            _state.value = _state.value.copy(isListening = false)
-            if (!result.isNullOrBlank()) {
-                send(result)
-            } else {
-                val code = speech.lastErrorCode
-                val msg = when (code) {
-                    null -> null // onResults null döndü, hata yok — normal sessizlik
-                    SpeechRecognizer.ERROR_NO_MATCH -> "🎤 Ses tanınamadı, tekrar dene."
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "🎤 Ses gelmedi, tekrar dene."
-                    SpeechRecognizer.ERROR_AUDIO -> "🎤 Mikrofon açılamadı. Uygulama izinlerini kontrol et."
-                    SpeechRecognizer.ERROR_NETWORK,
-                    SpeechRecognizer.ERROR_SERVER -> "🌐 Ses tanıma başarısız. Emülatörde Türkçe offline paketi eksik olabilir."
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "🎤 Ses tanıma meşgul, biraz bekle."
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "🎤 Mikrofon izni verilmemiş."
-                    else -> "🎤 Ses tanınamadı (kod: $code). Emülatörde mikrofon ayarı gerekebilir."
+            // 20 saniye sonra otomatik durdur
+            viewModelScope.launch {
+                delay(20_000)
+                if (_state.value.isListening) stopAndTranscribe()
+            }
+        }
+    }
+
+    private fun stopAndTranscribe() {
+        val filePath = whisper.stopRecording()
+        _state.value = _state.value.copy(isListening = false)
+        if (filePath == null) return
+
+        _state.value = _state.value.copy(isThinking = true)
+        viewModelScope.launch(Dispatchers.IO) {
+            val apiKey = memory.getApiKey()
+            if (apiKey.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    appendAssistantMessage("🎤 OpenAI API anahtarı eksik.")
+                    _state.value = _state.value.copy(isThinking = false)
                 }
-                if (msg != null) appendAssistantMessage(msg)
+                return@launch
+            }
+            val text = whisper.transcribe(filePath, apiKey)
+            withContext(Dispatchers.Main) {
+                _state.value = _state.value.copy(isThinking = false)
+                if (!text.isNullOrBlank()) {
+                    send(text)
+                } else {
+                    appendAssistantMessage("🎤 Ses tanınamadı. Daha yüksek sesle konuş veya tekrar dene.")
+                }
             }
         }
     }

@@ -494,7 +494,7 @@ private fun SettingsDialog(
 }
 
 private fun statusText(state: com.dilara.assistant.viewmodel.ChatUiState): String = when {
-    state.isListening -> "Seni dinliyorum..."
+    state.isListening -> "🔴 Kaydediliyor… Bitirmek için mikrofona tekrar bas."
     state.isSpeaking  -> "Konuşuyorum..."
     state.isThinking  -> "Düşünüyorum..."
     state.isActive    -> "Aktif · ${state.mode.label}"
