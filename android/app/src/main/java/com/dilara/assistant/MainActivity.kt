@@ -202,7 +202,7 @@ class MainActivity : ComponentActivity() {
                 }
                 // Çok kareyse temsil için eşit aralıkla en fazla 6 kare seç
                 val selected = selectEvenly(frames, 6)
-                val base64Frames = selected.map { BitmapUtils.toBase64Jpeg(it) }
+                val base64Frames = selected.map { BitmapUtils.toBase64JpegScaled(it) }
                 frames.forEach { it.recycle() }
                 vision.describeFrames(base64Frames, prompt = prompt)
             }

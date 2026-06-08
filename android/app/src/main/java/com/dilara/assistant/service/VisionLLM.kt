@@ -77,24 +77,35 @@ class VisionLLM(private val apiKey: String) {
                 )
             }
         }
+        val payload = json.encodeToString(JsonObject.serializer(), body)
 
-        val response = http.post("https://api.openai.com/v1/chat/completions") {
-            contentType(ContentType.Application.Json)
-            bearerAuth(apiKey)
-            setBody(TextContent(json.encodeToString(JsonObject.serializer(), body), ContentType.Application.Json))
+        // Geçici ağ hatalarında (connection abort vb.) bir kez yeniden dene
+        var lastError: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                val response = http.post("https://api.openai.com/v1/chat/completions") {
+                    contentType(ContentType.Application.Json)
+                    bearerAuth(apiKey)
+                    setBody(TextContent(payload, ContentType.Application.Json))
+                }
+
+                if (!response.status.isSuccess()) {
+                    val err = runCatching { response.body<VisionErrorResponse>() }.getOrNull()
+                    throw Exception(err?.error?.message ?: "HTTP ${response.status}")
+                }
+
+                return@runCatching response.body<VisionChatResponse>()
+                    .choices.firstOrNull()
+                    ?.message
+                    ?.content
+                    ?.trim()
+                    ?: "Görsel analiz edilemedi."
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt == 0) kotlinx.coroutines.delay(800)
+            }
         }
-
-        if (!response.status.isSuccess()) {
-            val err = runCatching { response.body<VisionErrorResponse>() }.getOrNull()
-            throw Exception(err?.error?.message ?: "HTTP ${response.status}")
-        }
-
-        response.body<VisionChatResponse>()
-            .choices.firstOrNull()
-            ?.message
-            ?.content
-            ?.trim()
-            ?: "Görsel analiz edilemedi."
+        throw lastError ?: Exception("Görsel analiz başarısız.")
     }
 
     fun close() = http.close()
