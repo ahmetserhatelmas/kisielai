@@ -23,6 +23,10 @@ object ScreenCapturePipeline {
     @Volatile
     var captureInProgress: Boolean = false
 
+    /** İzin alındıktan sonra anlık yakalama yerine kayıt başlatılacaksa true. */
+    @Volatile
+    var pendingRecordStart: Boolean = false
+
     fun start(
         prompt: String,
         userLabel: String,
@@ -42,6 +46,7 @@ object ScreenCapturePipeline {
         resultCallback = null
         permissionRequestInFlight = false
         captureInProgress = false
+        pendingRecordStart = false
     }
 
     fun hasPending(): Boolean = pending != null

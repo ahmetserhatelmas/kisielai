@@ -121,6 +121,7 @@ fun DilaraApp(vm: ChatViewModel = viewModel()) {
             ChatInput(
                 enabled = state.isActive && !state.isThinking,
                 isListening = state.isListening,
+                isScreenRecording = state.isScreenRecording,
                 onSend = { vm.send(it) },
                 onMic = { vm.startListening() },
                 onCamera = { vm.analyzeCamera() },
@@ -267,6 +268,7 @@ private fun ChatBubble(text: String, isUser: Boolean) {
 private fun ChatInput(
     enabled: Boolean,
     isListening: Boolean,
+    isScreenRecording: Boolean,
     onSend: (String) -> Unit,
     onMic: () -> Unit,
     onCamera: () -> Unit,
@@ -358,14 +360,16 @@ private fun ChatInput(
                 Text("📷", fontSize = 16.sp)
             }
             Spacer(Modifier.width(4.dp))
+            // Ekran kaydı butonu: kayıt sırasında kırmızı ⏹, normalde 👁
+            val screenColor = if (isScreenRecording) Color(0xFFE53935) else MaterialTheme.colorScheme.tertiary
             FilledIconButton(
                 onClick = onScreen,
-                enabled = enabled,
+                enabled = enabled || isScreenRecording,
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    containerColor = screenColor,
                 ),
             ) {
-                Text("👁", fontSize = 16.sp)
+                Text(if (isScreenRecording) "⏹" else "👁", fontSize = 16.sp)
             }
             Spacer(Modifier.width(4.dp))
             // Mikrofon butonu
@@ -511,6 +515,7 @@ private fun SettingsDialog(
 }
 
 private fun statusText(state: com.dilara.assistant.viewmodel.ChatUiState): String = when {
+    state.isScreenRecording -> "🔴 Ekran kaydı sürüyor… Bitirmek için göz simgesine bas."
     state.isListening -> "🔴 Kaydediliyor… Bitirmek için mikrofona tekrar bas."
     state.isSpeaking  -> "Konuşuyorum..."
     state.isThinking  -> "Düşünüyorum..."

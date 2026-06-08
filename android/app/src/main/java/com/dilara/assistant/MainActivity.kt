@@ -26,6 +26,7 @@ import com.dilara.assistant.util.BitmapUtils
 import com.dilara.assistant.util.MediaProjectionStore
 import com.dilara.assistant.util.ScreenCaptureHelper
 import com.dilara.assistant.util.ScreenCapturePipeline
+import com.dilara.assistant.util.ScreenRecorder
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
@@ -82,10 +83,17 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         MediaProjectionStore.onPermissionResult(result.resultCode, result.data)
-        if (MediaProjectionStore.ensureProjection() != null) {
-            lifecycleScope.launch { executePendingScreenCapture() }
+        val projection = MediaProjectionStore.ensureProjection()
+        if (projection != null) {
+            if (ScreenCapturePipeline.pendingRecordStart) {
+                ScreenCapturePipeline.pendingRecordStart = false
+                beginScreenRecording(projection)
+            } else {
+                lifecycleScope.launch { executePendingScreenCapture() }
+            }
         } else {
             stopScreenCaptureService()
+            ScreenCapturePipeline.pendingRecordStart = false
             if (ScreenCapturePipeline.hasPending()) {
                 ScreenCapturePipeline.complete(
                     Result.failure(Exception("Ekran kaydı izni verilmedi.")),
@@ -116,7 +124,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (ScreenCapturePipeline.hasPending() && MediaProjectionStore.ensureProjection() != null) {
+        val projection = MediaProjectionStore.ensureProjection()
+        if (projection != null && ScreenCapturePipeline.pendingRecordStart && !ScreenRecorder.isRecording) {
+            ScreenCapturePipeline.pendingRecordStart = false
+            beginScreenRecording(projection)
+        } else if (ScreenCapturePipeline.hasPending() && projection != null) {
             lifecycleScope.launch { executePendingScreenCapture() }
         }
     }
@@ -125,10 +137,13 @@ class MainActivity : ComponentActivity() {
         if (isFinishing) {
             VisionCapture.captureCamera = null
             VisionCapture.launchScreenCapture = null
+            VisionCapture.startScreenRecording = null
+            VisionCapture.stopScreenRecording = null
             AttachmentCapture.captureImage = null
             AttachmentCapture.captureVideo = null
             AttachmentCapture.readFile = null
             visionLLM?.close()
+            ScreenRecorder.release()
             MediaProjectionStore.release()
             ScreenCapturePipeline.clear()
             stopScreenCaptureService()
@@ -157,6 +172,53 @@ class MainActivity : ComponentActivity() {
                 screenCaptureLauncher.launch(MediaProjectionStore.createCaptureIntent())
             }
         }
+
+        VisionCapture.startScreenRecording = start@{
+            if (ScreenRecorder.isRecording) return@start
+            if (ScreenCapturePipeline.permissionRequestInFlight) return@start
+            val projection = MediaProjectionStore.ensureProjection()
+            if (projection != null) {
+                beginScreenRecording(projection)
+            } else {
+                // İzin gerek: dönüşte kayıt başlatılacak
+                ScreenCapturePipeline.pendingRecordStart = true
+                ScreenCapturePipeline.permissionRequestInFlight = true
+                startForegroundService(Intent(this, ScreenCaptureService::class.java))
+                screenCaptureLauncher.launch(MediaProjectionStore.createCaptureIntent())
+            }
+        }
+
+        VisionCapture.stopScreenRecording = stop@{ prompt ->
+            runVisionCapture { vision ->
+                val frames = ScreenRecorder.stop()
+                if (frames.isEmpty()) {
+                    return@runVisionCapture Result.failure(
+                        Exception("Kayıt sırasında ekran karesi alınamadı."),
+                    )
+                }
+                // Çok kareyse temsil için eşit aralıkla en fazla 6 kare seç
+                val selected = selectEvenly(frames, 6)
+                val base64Frames = selected.map { BitmapUtils.toBase64Jpeg(it) }
+                frames.forEach { it.recycle() }
+                stopScreenCaptureService()
+                vision.describeFrames(base64Frames, prompt = prompt)
+            }
+        }
+    }
+
+    private fun beginScreenRecording(projection: android.media.projection.MediaProjection) {
+        val metrics = DisplayMetrics().also {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(it)
+        }
+        ScreenRecorder.start(projection, metrics)
+    }
+
+    /** Listeden eşit aralıklarla en fazla [max] eleman seçer. */
+    private fun <T> selectEvenly(items: List<T>, max: Int): List<T> {
+        if (items.size <= max) return items
+        val step = items.size.toFloat() / max
+        return (0 until max).map { items[(it * step).toInt().coerceIn(0, items.size - 1)] }
     }
 
     private suspend fun executePendingScreenCapture() {

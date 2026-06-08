@@ -20,7 +20,6 @@ import com.dilara.assistant.service.WakeWordService
 import com.dilara.assistant.service.WhisperSTT
 import com.dilara.assistant.tools.ToolExecutor
 import com.dilara.assistant.util.AttachmentCapture
-import com.dilara.assistant.util.ScreenCapturePipeline
 import com.dilara.assistant.util.VisionCapture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -41,6 +40,7 @@ data class ChatUiState(
     val isThinking: Boolean = false,
     val isSpeaking: Boolean = false,
     val isListening: Boolean = false,
+    val isScreenRecording: Boolean = false,
     val mode: DilaraMode = DilaraMode.NORMAL,
     val apiKeyMissing: Boolean = false,
     val syncStatus: SyncStatus = SyncStatus.IDLE,
@@ -213,34 +213,53 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun analyzeScreen() {
         if (!_state.value.isActive || _state.value.isThinking) return
-        val label = "👁 Ekrana bak"
-        val prompt = "Telefon ekranında ne görüyorsun? Türkçe ve kısa anlat."
-        appendUserMessage(label)
-        _state.value = _state.value.copy(isThinking = true, isSpeaking = false)
 
-        ScreenCapturePipeline.start(prompt, label) { result ->
-            viewModelScope.launch {
-                result.fold(
-                    onSuccess = { reply ->
-                        memory.appendHistory("user", label)
-                        memory.appendHistory("assistant", reply)
-                        appendAssistantMessage(reply)
-                        _state.value = _state.value.copy(isThinking = false)
-                        speak(reply)
-                    },
-                    onFailure = { error ->
-                        appendAssistantMessage("Görsel analiz hatası: ${error.message?.take(100)}")
-                        _state.value = _state.value.copy(isThinking = false, isSpeaking = false)
-                    },
-                )
-            }
-        }
-
-        val launcher = VisionCapture.launchScreenCapture
-        if (launcher == null) {
-            ScreenCapturePipeline.complete(Result.failure(Exception("Ekran analizi başlatılamadı.")))
+        if (_state.value.isScreenRecording) {
+            stopScreenRecordingAndAnalyze()
         } else {
-            launcher.invoke()
+            startScreenRecording()
+        }
+    }
+
+    private fun startScreenRecording() {
+        val starter = VisionCapture.startScreenRecording
+        if (starter == null) {
+            appendAssistantMessage("Ekran kaydı başlatılamadı.")
+            return
+        }
+        _state.value = _state.value.copy(isScreenRecording = true)
+        appendAssistantMessage(
+            "Ekran kaydı başladı. İstediğin uygulamaya geç, işini yap. Bitince tekrar göz simgesine bas, ekranda olanları yorumlayayım."
+        )
+        starter.invoke()
+    }
+
+    private fun stopScreenRecordingAndAnalyze() {
+        val stopper = VisionCapture.stopScreenRecording
+        _state.value = _state.value.copy(isScreenRecording = false)
+        val label = "👁 Ekran kaydı"
+        appendUserMessage(label)
+        if (stopper == null) {
+            appendAssistantMessage("Ekran kaydı bitirilemedi.")
+            return
+        }
+        _state.value = _state.value.copy(isThinking = true, isSpeaking = false)
+        val prompt = "Bu kareler bir ekran kaydından sırayla alınmıştır. " +
+            "Ekranda zaman içinde ne yapıldığını, hangi uygulama/ekranların açıldığını Türkçe ve anlaşılır şekilde özetle."
+        viewModelScope.launch {
+            try {
+                val reply = withContext(Dispatchers.IO) {
+                    stopper.invoke(prompt).getOrThrow()
+                }
+                memory.appendHistory("user", label)
+                memory.appendHistory("assistant", reply)
+                appendAssistantMessage(reply)
+                _state.value = _state.value.copy(isThinking = false)
+                speak(reply)
+            } catch (e: Exception) {
+                appendAssistantMessage("Ekran kaydı yorumlanamadı: ${e.message?.take(100)}")
+                _state.value = _state.value.copy(isThinking = false, isSpeaking = false)
+            }
         }
     }
 

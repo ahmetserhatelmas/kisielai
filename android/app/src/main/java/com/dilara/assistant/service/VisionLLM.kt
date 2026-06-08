@@ -40,24 +40,38 @@ class VisionLLM(private val apiKey: String) {
         mimeType: String = "image/jpeg",
         prompt: String = "Bu görselde ne var? Türkçe ve kısa anlat.",
         model: String = "gpt-4o-mini",
+    ): Result<String> = describeFrames(listOf(imageBase64), mimeType, prompt, model)
+
+    /**
+     * Birden fazla kareyi tek istekte gönderir. Ekran kaydı gibi
+     * zaman içinde değişen bir görüntüyü "video" gibi yorumlamak için.
+     */
+    suspend fun describeFrames(
+        framesBase64: List<String>,
+        mimeType: String = "image/jpeg",
+        prompt: String = "Bu kareler bir ekran kaydının sırayla alınmış parçalarıdır. Ekranda zaman içinde ne olduğunu Türkçe anlat.",
+        model: String = "gpt-4o-mini",
     ): Result<String> = runCatching {
+        if (framesBase64.isEmpty()) throw Exception("Kare yok.")
         val body = buildJsonObject {
             put("model", model)
-            put("max_tokens", 600)
+            put("max_tokens", 700)
             putJsonArray("messages") {
                 add(
                     buildJsonObject {
                         put("role", "user")
                         putJsonArray("content") {
                             add(buildJsonObject { put("type", "text"); put("text", prompt) })
-                            add(
-                                buildJsonObject {
-                                    put("type", "image_url")
-                                    putJsonObject("image_url") {
-                                        put("url", "data:$mimeType;base64,$imageBase64")
-                                    }
-                                },
-                            )
+                            framesBase64.forEach { frame ->
+                                add(
+                                    buildJsonObject {
+                                        put("type", "image_url")
+                                        putJsonObject("image_url") {
+                                            put("url", "data:$mimeType;base64,$frame")
+                                        }
+                                    },
+                                )
+                            }
                         }
                     },
                 )
