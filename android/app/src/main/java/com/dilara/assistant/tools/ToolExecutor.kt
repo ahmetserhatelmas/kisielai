@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -13,6 +14,7 @@ import android.provider.CalendarContract
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.telephony.SmsManager
+import androidx.core.content.ContextCompat
 import com.dilara.assistant.data.api.FunctionDef
 import com.dilara.assistant.data.api.OpenAITool
 import com.dilara.assistant.service.DilaraAccessibilityService
@@ -25,6 +27,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 private val BANK_BLACKLIST = setOf(
     "akbank", "garanti", "yapikredi", "yapı kredi", "isbank", "iş bankası",
@@ -103,17 +106,54 @@ class ToolExecutor(private val context: Context) {
             runCatching {
                 val cal = Calendar.getInstance().apply {
                     set(year, month - 1, day, hour, minute, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }
-                val intent = Intent(Intent.ACTION_INSERT).apply {
-                    data = CalendarContract.Events.CONTENT_URI
-                    putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, cal.timeInMillis)
-                    putExtra(CalendarContract.EXTRA_EVENT_END_TIME, cal.timeInMillis + 3600_000)
-                    putExtra(CalendarContract.Events.TITLE, title)
-                    putExtra(CalendarContract.Events.DESCRIPTION, description)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val startMs = cal.timeInMillis
+                val endMs = startMs + 3_600_000L
+
+                val hasWrite = ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.WRITE_CALENDAR
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasWrite) {
+                    // Mevcut takvimlerden ilk geçerli olanı bul
+                    val calId: Long = run {
+                        val projection = arrayOf(CalendarContract.Calendars._ID)
+                        context.contentResolver.query(
+                            CalendarContract.Calendars.CONTENT_URI,
+                            projection, null, null, null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getLong(0) else 1L
+                        } ?: 1L
+                    }
+
+                    val values = ContentValues().apply {
+                        put(CalendarContract.Events.CALENDAR_ID, calId)
+                        put(CalendarContract.Events.TITLE, title)
+                        put(CalendarContract.Events.DESCRIPTION, description)
+                        put(CalendarContract.Events.DTSTART, startMs)
+                        put(CalendarContract.Events.DTEND, endMs)
+                        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                    }
+                    val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+                    if (uri != null) {
+                        "$title etkinliği $day/$month/$year ${"%02d".format(hour)}:${"%02d".format(minute)} için takvime kaydedildi."
+                    } else {
+                        "Etkinlik eklenemedi — takvim izni verilmemiş olabilir."
+                    }
+                } else {
+                    // İzin yoksa takvim uygulamasını açarak kullanıcıya form göster
+                    val intent = Intent(Intent.ACTION_INSERT).apply {
+                        data = CalendarContract.Events.CONTENT_URI
+                        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs)
+                        putExtra(CalendarContract.Events.TITLE, title)
+                        putExtra(CalendarContract.Events.DESCRIPTION, description)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    "Takvim uygulaması açıldı. Lütfen 'Kaydet' butonuna bas."
                 }
-                context.startActivity(intent)
-                "$title etkinliği $day/$month/$year ${"%02d".format(hour)}:${"%02d".format(minute)} için takvime eklendi."
             }.getOrElse { "Etkinlik eklenemedi: ${it.message}" }
         }
 
