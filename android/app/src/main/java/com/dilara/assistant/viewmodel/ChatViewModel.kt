@@ -336,7 +336,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val factsSummary = memory.getFactsSummary()
                 val systemPrompt = personality.buildSystemPrompt(factsSummary)
 
-                // Mesaj listesi: sistem + geçmiş + yeni kullanıcı mesajı
+                // Kullanıcı mesajını ÖNCE geçmişe ekle ki LLM son mesajı görsün
+                conversationHistory.add(OpenAIMessage(role = "user", content = userText))
+
+                // Mesaj listesi: sistem + güncel geçmiş (yeni kullanıcı mesajı dahil)
                 val messages = mutableListOf(
                     OpenAIMessage(role = "system", content = systemPrompt),
                 )
@@ -361,8 +364,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     temperature = if (personality.mode == DilaraMode.SERIOUS) 0.3 else 0.65,
                 )
 
-                // Geçmişe ekle (kullanıcı + asistan)
-                conversationHistory.add(OpenAIMessage(role = "user", content = userText))
+                // Asistan cevabını geçmişe ekle
                 conversationHistory.add(OpenAIMessage(role = "assistant", content = reply))
                 if (conversationHistory.size > 40) {
                     repeat(conversationHistory.size - 40) { conversationHistory.removeAt(0) }
@@ -378,6 +380,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     speak(reply)
                 }
             } catch (e: Exception) {
+                // Hata durumunda yetim kalan kullanıcı mesajını geçmişten çıkar
+                if (conversationHistory.lastOrNull()?.role == "user") {
+                    conversationHistory.removeAt(conversationHistory.size - 1)
+                }
                 val errorMsg = "Bir sorun çıktı: ${e.message?.take(100)}"
                 withContext(Dispatchers.Main) {
                     appendAssistantMessage(errorMsg)
