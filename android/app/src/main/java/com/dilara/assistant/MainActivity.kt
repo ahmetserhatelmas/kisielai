@@ -261,22 +261,24 @@ class MainActivity : ComponentActivity() {
                     mime.startsWith("image/") -> {
                         val bitmap = decodeBitmapFromUri(uri)
                             ?: throw Exception("Resim yüklenemedi.")
-                        runVisionCapture { vision ->
+                        val analysis = runVisionCapture { vision ->
                             vision.describe(
                                 BitmapUtils.toBase64Jpeg(bitmap),
                                 prompt = "Bu resimde ne var? Türkçe ve detaylıca anlat.",
                             )
                         }.getOrThrow()
+                        "\u0000VISION\u0000$analysis"
                     }
                     mime.startsWith("video/") -> {
                         val bitmap = captureVideoFrame(uri)
                             ?: throw Exception("Video karesi alınamadı.")
-                        runVisionCapture { vision ->
+                        val analysis = runVisionCapture { vision ->
                             vision.describe(
                                 BitmapUtils.toBase64Jpeg(bitmap),
                                 prompt = "Bu görselde ne görüyorsun? Türkçe anlat.",
                             )
                         }.getOrThrow()
+                        "\u0000VISION\u0000$analysis"
                     }
                     else -> readFileContent(uri)
                 }

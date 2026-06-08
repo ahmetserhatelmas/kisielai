@@ -275,8 +275,20 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val content = result.getOrThrow()
                 _state.value = _state.value.copy(isThinking = false)
-                // Dosya içeriğini kullanıcı mesajı olarak gönder
-                send("📎 Dosya içeriği:\n\n${content.take(4000)}")
+
+                if (content.startsWith("\u0000VISION\u0000")) {
+                    // Görsel analiz sonucu — "Galeriden resim" ile aynı davranış
+                    val reply = content.removePrefix("\u0000VISION\u0000")
+                    val label = "📎 Dosyadan görsel"
+                    memory.appendHistory("user", label)
+                    memory.appendHistory("assistant", reply)
+                    appendUserMessage(label)
+                    appendAssistantMessage(reply)
+                    speak(reply)
+                } else {
+                    // Metin dosyası — LLM'e gönder
+                    send("📎 Dosya içeriği:\n\n${content.take(4000)}")
+                }
             } catch (e: Exception) {
                 appendAssistantMessage("Dosya okunamadı: ${e.message?.take(100)}")
                 _state.value = _state.value.copy(isThinking = false)
