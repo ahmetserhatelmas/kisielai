@@ -288,7 +288,12 @@ class MainActivity : ComponentActivity() {
 
     private fun readFileContent(uri: Uri): String {
         val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-        val fileName = uri.lastPathSegment ?: "dosya"
+
+        // Okunabilir dosya adı al
+        val fileName = runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull() ?: uri.lastPathSegment ?: "dosya"
 
         return when {
             mime == "application/pdf" -> readPdfContent(uri)
