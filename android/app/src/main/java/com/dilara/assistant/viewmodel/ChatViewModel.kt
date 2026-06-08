@@ -164,12 +164,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 val code = speech.lastErrorCode
                 val msg = when (code) {
-                    null,
-                    SpeechRecognizer.ERROR_NO_MATCH,
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> null // normal sessizlik
+                    null -> null // onResults null döndü, hata yok — normal sessizlik
+                    SpeechRecognizer.ERROR_NO_MATCH -> "🎤 Ses tanınamadı, tekrar dene."
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "🎤 Ses gelmedi, tekrar dene."
                     SpeechRecognizer.ERROR_AUDIO -> "🎤 Mikrofon açılamadı. Uygulama izinlerini kontrol et."
-                    SpeechRecognizer.ERROR_NETWORK -> "🌐 İnternet bağlantısı yok. Türkçe offline paketi emülatörde eksik olabilir."
-                    SpeechRecognizer.ERROR_SERVER -> "🌐 Ses tanıma sunucu hatası. Türkçe offline paketi emülatörde eksik olabilir."
+                    SpeechRecognizer.ERROR_NETWORK,
+                    SpeechRecognizer.ERROR_SERVER -> "🌐 Ses tanıma başarısız. Emülatörde Türkçe offline paketi eksik olabilir."
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "🎤 Ses tanıma meşgul, biraz bekle."
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "🎤 Mikrofon izni verilmemiş."
                     else -> "🎤 Ses tanınamadı (kod: $code). Emülatörde mikrofon ayarı gerekebilir."

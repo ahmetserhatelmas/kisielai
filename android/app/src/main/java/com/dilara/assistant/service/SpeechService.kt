@@ -41,22 +41,7 @@ class SpeechService(private val context: Context) {
      * Hata durumunda null döner; [lastErrorCode] ile hata tipi sorgulanabilir.
      * Ana (UI) thread'de çağrılmalıdır.
      */
-    suspend fun listen(): String? {
-        // Önce Türkçe dene, hata gelirse İngilizce ile yeniden dene
-        val result = listenWithLang("tr-TR")
-        if (result != null) return result
-
-        val code = lastErrorCode ?: return null
-        val isTechnicalError = code !in listOf(
-            SpeechRecognizer.ERROR_NO_MATCH,
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-        )
-        if (isTechnicalError) {
-            // tr-TR paketi yoksa en-US ile fallback
-            return listenWithLang("en-US")
-        }
-        return null
-    }
+    suspend fun listen(): String? = listenWithLang("tr-TR")
 
     private suspend fun listenWithLang(lang: String): String? =
         suspendCancellableCoroutine { cont ->
