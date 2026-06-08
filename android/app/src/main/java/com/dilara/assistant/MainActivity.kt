@@ -191,6 +191,10 @@ class MainActivity : ComponentActivity() {
         VisionCapture.stopScreenRecording = stop@{ prompt ->
             runVisionCapture { vision ->
                 val frames = ScreenRecorder.stop()
+                // Kayıt bitti: projeksiyonu serbest bırak ki üstteki kırmızı
+                // kayıt göstergesi kapansın (Android 14+ token tek kullanımlık).
+                MediaProjectionStore.release()
+                stopScreenCaptureService()
                 if (frames.isEmpty()) {
                     return@runVisionCapture Result.failure(
                         Exception("Kayıt sırasında ekran karesi alınamadı."),
@@ -200,7 +204,6 @@ class MainActivity : ComponentActivity() {
                 val selected = selectEvenly(frames, 6)
                 val base64Frames = selected.map { BitmapUtils.toBase64Jpeg(it) }
                 frames.forEach { it.recycle() }
-                stopScreenCaptureService()
                 vision.describeFrames(base64Frames, prompt = prompt)
             }
         }
