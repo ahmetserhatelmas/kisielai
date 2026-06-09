@@ -156,7 +156,7 @@ fun DilaraApp(vm: ChatViewModel = viewModel()) {
                 visible = state.isThinking,
                 enter = fadeIn(),
                 exit = fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),
             ) {
                 ThinkingDots()
             }
@@ -251,7 +251,7 @@ private fun ChatBubble(text: String, isUser: Boolean) {
             ),
             color = if (isUser) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.fillMaxWidth(0.88f),
         ) {
             Text(
                 text = text,
@@ -259,6 +259,7 @@ private fun ChatBubble(text: String, isUser: Boolean) {
                 color = if (isUser) Color.White
                 else MaterialTheme.colorScheme.onSurface,
                 fontSize = 15.sp,
+                lineHeight = 22.sp,
             )
         }
     }
@@ -280,115 +281,139 @@ private fun ChatInput(
     var text by remember { mutableStateOf("") }
     var showAttachMenu by remember { mutableStateOf(false) }
 
-    Surface(tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = {
-                    Text(if (enabled) "Bir şey yaz..." else "Önce yetki ver")
-                },
-                enabled = enabled,
-                modifier = Modifier
-                    .weight(1f)
-                    .onPreviewKeyEvent { keyEvent ->
-                        // Fiziksel klavyede Enter → gönder (Shift+Enter = yeni satır)
-                        if (keyEvent.type == KeyEventType.KeyDown &&
-                            keyEvent.key == Key.Enter &&
-                            !keyEvent.isShiftPressed
-                        ) {
-                            if (text.isNotBlank()) { onSend(text); text = "" }
-                            true
-                        } else false
-                    },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Send,
-                ),
-                keyboardActions = KeyboardActions(onSend = {
-                    if (text.isNotBlank()) { onSend(text); text = "" }
-                }),
-            )
-            Spacer(Modifier.width(6.dp))
+    val sendMessage = {
+        if (text.isNotBlank()) {
+            onSend(text)
+            text = ""
+        }
+    }
 
-            // 📎 Ekle butonu + dropdown
-            Box {
-                FilledIconButton(
-                    onClick = { showAttachMenu = true },
+    Surface(
+        tonalElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+        ) {
+            // Üst satır: geniş metin kutusu + gönder
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = {
+                        Text(if (enabled) "Bir şey yaz..." else "Önce yetki ver")
+                    },
                     enabled = enabled,
+                    modifier = Modifier
+                        .weight(1f)
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown &&
+                                keyEvent.key == Key.Enter &&
+                                !keyEvent.isShiftPressed
+                            ) {
+                                sendMessage()
+                                true
+                            } else false
+                        },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Send,
+                    ),
+                    keyboardActions = KeyboardActions(onSend = { sendMessage() }),
+                )
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    onClick = sendMessage,
+                    enabled = enabled && text.isNotBlank(),
+                    modifier = Modifier.size(48.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color(0xFF2C5F2E),
+                        containerColor = MaterialTheme.colorScheme.primary,
                     ),
                 ) {
-                    Text("📎", fontSize = 16.sp)
-                }
-                DropdownMenu(
-                    expanded = showAttachMenu,
-                    onDismissRequest = { showAttachMenu = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("🖼  Galeriden resim") },
-                        onClick = { showAttachMenu = false; onAttachImage() },
-                        enabled = enabled,
-                    )
-                    DropdownMenuItem(
-                        text = { Text("🎬  Galeriden video") },
-                        onClick = { showAttachMenu = false; onAttachVideo() },
-                        enabled = enabled,
-                    )
-                    DropdownMenuItem(
-                        text = { Text("📄  Dosya seç") },
-                        onClick = { showAttachMenu = false; onAttachFile() },
-                        enabled = enabled,
-                    )
+                    Text("➤", fontSize = 18.sp, color = Color.White)
                 }
             }
 
-            Spacer(Modifier.width(4.dp))
-            FilledIconButton(
-                onClick = onCamera,
-                enabled = enabled,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                ),
+            Spacer(Modifier.height(10.dp))
+
+            // Alt satır: aksiyon butonları eşit aralıklı
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("📷", fontSize = 16.sp)
-            }
-            Spacer(Modifier.width(4.dp))
-            // Ekran kaydı butonu: kayıt sırasında kırmızı ⏹, normalde 👁
-            val screenColor = if (isScreenRecording) Color(0xFFE53935) else MaterialTheme.colorScheme.tertiary
-            FilledIconButton(
-                onClick = onScreen,
-                enabled = enabled || isScreenRecording,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = screenColor,
-                ),
-            ) {
-                Text(if (isScreenRecording) "⏹" else "👁", fontSize = 16.sp)
-            }
-            Spacer(Modifier.width(4.dp))
-            // Mikrofon butonu
-            val micColor = if (isListening) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
-            FilledIconButton(
-                onClick = onMic,
-                enabled = enabled,
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = micColor),
-            ) {
-                Text(if (isListening) "⏹" else "🎤", fontSize = 18.sp)
-            }
-            Spacer(Modifier.width(4.dp))
-            Button(
-                onClick = {
-                    if (text.isNotBlank()) { onSend(text); text = "" }
-                },
-                enabled = enabled && text.isNotBlank(),
-            ) {
-                Text("Gönder")
+                Box {
+                    FilledIconButton(
+                        onClick = { showAttachMenu = true },
+                        enabled = enabled,
+                        modifier = Modifier.size(44.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = Color(0xFF2C5F2E),
+                        ),
+                    ) {
+                        Text("📎", fontSize = 16.sp)
+                    }
+                    DropdownMenu(
+                        expanded = showAttachMenu,
+                        onDismissRequest = { showAttachMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("🖼  Galeriden resim") },
+                            onClick = { showAttachMenu = false; onAttachImage() },
+                            enabled = enabled,
+                        )
+                        DropdownMenuItem(
+                            text = { Text("🎬  Galeriden video") },
+                            onClick = { showAttachMenu = false; onAttachVideo() },
+                            enabled = enabled,
+                        )
+                        DropdownMenuItem(
+                            text = { Text("📄  Dosya seç") },
+                            onClick = { showAttachMenu = false; onAttachFile() },
+                            enabled = enabled,
+                        )
+                    }
+                }
+
+                FilledIconButton(
+                    onClick = onCamera,
+                    enabled = enabled,
+                    modifier = Modifier.size(44.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                    ),
+                ) {
+                    Text("📷", fontSize = 16.sp)
+                }
+
+                val screenColor = if (isScreenRecording) Color(0xFFE53935) else MaterialTheme.colorScheme.tertiary
+                FilledIconButton(
+                    onClick = onScreen,
+                    enabled = enabled || isScreenRecording,
+                    modifier = Modifier.size(44.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = screenColor,
+                    ),
+                ) {
+                    Text(if (isScreenRecording) "⏹" else "👁", fontSize = 16.sp)
+                }
+
+                val micColor = if (isListening) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
+                FilledIconButton(
+                    onClick = onMic,
+                    enabled = enabled,
+                    modifier = Modifier.size(44.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = micColor),
+                ) {
+                    Text(if (isListening) "⏹" else "🎤", fontSize = 16.sp)
+                }
             }
         }
     }
